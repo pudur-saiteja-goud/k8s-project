@@ -1,0 +1,74 @@
+pipeline {
+    agent any
+    tools {
+        jdk 'jdk'
+        nodejs 'node'
+    }
+    environment {
+        SCANNER_HOME=tool 'sonar'
+    }
+    stages {
+        stage ("Clean") {
+            steps {
+                cleanWs()
+            }
+        }
+        stage ("Code") {
+            steps {
+                git branch: 'main', url: 'https://github.com/devops0014/Zomato-Repo.git'
+            }
+        }
+        
+        stage("Sonarqube Analysis") {
+            steps{
+                withSonarQubeEnv('sonar') {
+                    sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=zomato \
+                    -Dsonar.projectKey=zomato '''
+                }
+            }
+        }
+        stage ("Install dependencies") {
+            steps {
+                sh 'npm install'
+            }
+        }
+        stage ("OWASP") {
+            steps {
+                dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit', odcInstallation: 'dp'
+                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+            }
+        }
+        stage ("Trivy scan") {
+            steps {
+                sh "trivy fs . > trivyfs.txt"
+            }
+        }
+        
+        stage ("Build Dockerfile") {
+            steps {
+                sh 'docker build -t sai7969/ccit:zomato1 .'
+            }
+        }
+        stage ("Scan image") {
+            steps {
+                sh 'trivy image sai7969/ccit:zomato1'
+            }
+        }
+        stage('push'){
+            steps{
+                script{
+                  withDockerRegistry(credentialsId: 'aws') {
+                    sh 'docker push sai7969/ccit:zomato1'
+                  }  
+                  
+                }
+                
+                
+            }
+        }
+
+
+
+
+    }
+}
